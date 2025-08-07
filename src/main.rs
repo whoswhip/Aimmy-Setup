@@ -47,17 +47,30 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
 
+    let mut failed = false;
+
     let temp_dir = std::env::temp_dir();
     for rt in RUNTIMES {
         let path = temp_dir.join(rt.file);
         if !path.exists() {
             println!("Downloading {}...", rt.description);
-            download_file(rt.url, path.to_str().unwrap())?;
+            let result = download_file(rt.url, path.to_str().unwrap());
+            if let Err(e) = result {
+                eprintln!("Failed to download {}: {}", rt.description, e);
+                failed = true;
+                continue;
+            }
         }
         println!("Installing {}...", rt.description);
         if !Command::new(&path).args(rt.args).status()?.success() {
             eprintln!("Failed to install {}", rt.description);
         }
+    }
+
+    if failed {
+        eprintln!("One or more installations failed.");
+        std::io::stdin().read_line(&mut String::new())?;
+        return Err("Installation failed".into());
     }
 
     let client = reqwest::blocking::Client::new();
@@ -105,7 +118,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut archive = zip::ZipArchive::new(std::fs::File::open("aimmy.zip")?)?;
     archive.extract("Aimmy")?;
     std::fs::write("Aimmy/bin/version.txt", version)?;
-    
+
     println!("Cleaning up...");
     std::fs::remove_file("aimmy.zip")?;
     for rt in RUNTIMES {
@@ -116,6 +129,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Command::new("explorer")
         .arg(std::fs::canonicalize("Aimmy")?)
         .status()?;
+
+    println!("Aimmy {} installed successfully!", version);
+    println!("Press Enter to exit...");
+    std::io::stdin().read_line(&mut String::new())?;
 
     Ok(())
 }
